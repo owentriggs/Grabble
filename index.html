@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Grabble Checker</title>
+  <meta name="description" content="Scan Scrabble tiles and check if the word is valid.">
+  <meta name="theme-color" content="#0e6b55">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Grabble">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app">
+    <main id="screens">
+
+      <!-- Scan -->
+      <section class="screen screen-scan active" id="screen-scan" aria-label="Scan tiles">
+        <video id="video" playsinline muted autoplay></video>
+        <div class="scan-overlay">
+          <header class="scan-top">
+            <span class="brand"><span class="brand-tile">G</span>Grabble</span>
+            <button class="icon-btn glass" id="torch-btn" hidden aria-label="Toggle torch">
+              <svg viewBox="0 0 24 24"><path d="M7 2h10v4l-3 4v12h-4V10L7 6z"/></svg>
+            </button>
+          </header>
+          <div class="guide-wrap">
+            <div class="guide" id="guide"><i></i><i></i><i></i><i></i>
+              <p class="guide-hint">Fit the tiles inside the frame</p>
+            </div>
+          </div>
+          <div class="scan-controls">
+            <label class="icon-btn glass" aria-label="Choose a photo">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
+              <input type="file" accept="image/*" id="photo-input" hidden>
+            </label>
+            <button class="shutter" id="shutter" aria-label="Scan tiles"><span></span></button>
+            <button class="icon-btn glass" id="flip-btn" aria-label="Switch camera">
+              <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9 13a3 3 0 0 1 5-2.2M15 14a3 3 0 0 1-5 2.2"/><path d="M14 9v2h-2M10 18v-2h2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="camera-off" id="camera-off" hidden>
+          <div class="camera-off-inner">
+            <div class="big-icon">
+              <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>
+            </div>
+            <h2>Scan your tiles</h2>
+            <p id="camera-off-msg">Point your camera at a row of tiles and Grabble will read them.</p>
+            <button class="btn primary" id="camera-start">Turn on camera</button>
+            <label class="btn ghost">Choose a photo<input type="file" accept="image/*" id="photo-input-2" hidden></label>
+          </div>
+        </div>
+        <div class="busy" id="busy" hidden>
+          <div class="spinner"></div>
+          <p id="busy-msg">Reading tiles…</p>
+        </div>
+      </section>
+
+      <!-- Type -->
+      <section class="screen screen-type" id="screen-type" aria-label="Type a word">
+        <header class="title-bar"><h1>Check a word</h1></header>
+        <div class="screen-body">
+          <div class="type-field">
+            <input id="word-input" type="text" inputmode="text" autocomplete="off" autocorrect="off"
+                   autocapitalize="characters" spellcheck="false" enterkeyhint="done" maxlength="15" placeholder="Type a word">
+            <button class="clear-btn" id="word-clear" aria-label="Clear" hidden>
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </div>
+          <div id="type-result"></div>
+        </div>
+      </section>
+
+      <!-- History -->
+      <section class="screen screen-history" id="screen-history" aria-label="History">
+        <header class="title-bar">
+          <h1>History</h1>
+          <button class="text-btn" id="history-clear">Clear</button>
+        </header>
+        <div class="screen-body">
+          <ul class="history" id="history-list"></ul>
+          <div class="empty" id="history-empty">
+            <p>Words you check will show up here.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section class="screen screen-settings" id="screen-settings" aria-label="Settings">
+        <header class="title-bar"><h1>Settings</h1></header>
+        <div class="screen-body">
+          <h3 class="group-label">Rules</h3>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span>Minimum word length</span>
+                <small>Shorter words are flagged as too short</small>
+              </div>
+              <div class="stepper">
+                <button id="min-dec" aria-label="Decrease">−</button>
+                <output id="min-len">3</output>
+                <button id="min-inc" aria-label="Increase">+</button>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="group-label">Dictionary</h3>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span id="dict-name">ENABLE</span>
+                <small id="dict-count">Loading…</small>
+              </div>
+            </div>
+            <label class="row row-action">
+              <span>Import word list (.txt)…</span>
+              <input type="file" accept=".txt,text/plain" id="dict-input" hidden>
+            </label>
+            <button class="row row-action danger" id="dict-reset" hidden>Use built-in dictionary</button>
+          </div>
+          <p class="footnote">The built-in list is ENABLE, a public-domain word list close to the North American tournament list. Import a plain text file with one word per line to use something else, such as Collins Scrabble Words.</p>
+
+          <h3 class="group-label">Offline</h3>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span>Tile reader</span>
+                <small id="ocr-status">Not loaded yet</small>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="group-label">Tips for scanning</h3>
+          <div class="group tips">
+            <p>Lay the tiles in one straight row with small gaps between them.</p>
+            <p>Fill the frame with the tiles and keep the phone parallel to them.</p>
+            <p>Use good, even light. Turn on the torch if the room is dim.</p>
+            <p>If a letter comes out wrong, tap the tiles to fix it.</p>
+          </div>
+          <p class="footnote center" id="version"></p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Scan result sheet -->
+    <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Scan result" hidden>
+      <div class="sheet-grip"></div>
+      <div id="sheet-result"></div>
+      <details class="seen" id="seen">
+        <summary>What the scanner saw</summary>
+        <div class="seen-img" id="seen-img"></div>
+      </details>
+      <div class="sheet-actions">
+        <button class="btn primary" id="sheet-again">Scan again</button>
+      </div>
+    </div>
+
+    <nav class="tabbar" id="tabbar">
+      <button class="tab active" data-screen="scan">
+        <svg viewBox="0 0 24 24"><path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3"/><path d="M8 12h8"/></svg>
+        <span>Scan</span>
+      </button>
+      <button class="tab" data-screen="type">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8"/></svg>
+        <span>Type</span>
+      </button>
+      <button class="tab" data-screen="history">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+        <span>History</span>
+      </button>
+      <button class="tab" data-screen="settings">
+        <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <div class="toast" id="toast" hidden></div>
+  </div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
