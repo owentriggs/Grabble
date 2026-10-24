@@ -4,11 +4,11 @@ A phone app for settling arguments in **Grabble**, the Scrabble-tile game where 
 
 Point your camera at a row of tiles and it tells you whether the word is valid. You can also type a word in.
 
-- **Scan:** line the tiles up in the frame and tap the shutter. You can also pick a photo from your gallery.
+- **Always live:** the camera reads the tiles continuously and the result appears in the panel underneath as soon as two reads agree. There's no shutter to press. Tap **Hold** to freeze a reading, and **Resume** to carry on. You can also pick a photo from your gallery.
+- **Same layout for typing:** the Type tab uses the same result panel, updating as you type.
 - **Fix misreads:** tap the tiles to correct a letter. If a scan isn't a word but a lookalike letter would make one (E/F, C/G, O/Q…), it suggests that word. It never swaps one in for you.
 - **Same-letter words:** when a word isn't valid, it lists valid words that use exactly the same letters.
-- **Live mode:** turn on Live and it reads the tiles continuously, with no need to press the shutter. A reading is only shown once it's been the same twice in a row, so it doesn't flicker.
-- **Full-screen verdict:** a big green ✓ or red ✗ you can turn round and show the table. Tap the expand icon on any result, or turn it on in Settings to show it after every scan.
+- **Full-screen verdict:** a big green ✓ or red ✗ you can turn round and show the table. Tap the expand icon on any result, or turn it on in Settings to show it whenever you hold a reading or pick a photo.
 - **Sounds and vibration:** a chime for valid words and a buzz for invalid ones. Sounds can be turned off in Settings.
 - **Definitions when online:** valid words show their meaning, looked up from the Free Dictionary API with Wiktionary as a fallback. Recent look-ups are kept on the device.
 - **Save the photo:** under "What the scanner saw" you can save the original scan, so misreads can be sent in and used to tune the scanner.
