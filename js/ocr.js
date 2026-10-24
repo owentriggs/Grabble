@@ -351,8 +351,18 @@ export function segment(source) {
   return { glyphs: canvases, bars, line };
 }
 
+// Reads run one at a time (live scanning and the shutter share one engine,
+// and a read changes its settings part-way through).
+let queue = Promise.resolve();
+
 // Returns { letters: ['C','A','T'] (with '?' for unreadable), preview: canvas }
-export async function readTiles(source) {
+export function readTiles(source) {
+  const run = queue.then(() => readNow(source));
+  queue = run.catch(() => {});
+  return run;
+}
+
+async function readNow(source) {
   const { glyphs, bars, line } = segment(source);
   if (!glyphs.length) return { letters: [], preview: null };
 

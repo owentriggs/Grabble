@@ -25,15 +25,21 @@
         <div class="scan-overlay">
           <header class="scan-top">
             <span class="brand"><span class="brand-tile">G</span>Grabble</span>
-            <button class="icon-btn glass" id="torch-btn" hidden aria-label="Toggle torch">
-              <svg viewBox="0 0 24 24"><path d="M7 2h10v4l-3 4v12h-4V10L7 6z"/></svg>
-            </button>
+            <div class="scan-top-actions">
+              <button class="icon-btn glass" id="torch-btn" hidden aria-label="Toggle torch">
+                <svg viewBox="0 0 24 24"><path d="M7 2h10v4l-3 4v12h-4V10L7 6z"/></svg>
+              </button>
+              <button class="live-btn glass" id="live-btn" aria-pressed="false">
+                <span class="live-dot"></span>Live
+              </button>
+            </div>
           </header>
           <div class="guide-wrap">
             <div class="guide" id="guide"><i></i><i></i><i></i><i></i>
               <p class="guide-hint">Fit the tiles inside the frame</p>
             </div>
           </div>
+          <button class="live-chip" id="live-chip" hidden aria-live="polite"></button>
           <div class="scan-controls">
             <label class="icon-btn glass" aria-label="Choose a photo">
               <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>
@@ -110,6 +116,31 @@
             </div>
           </div>
 
+          <h3 class="group-label">Feedback</h3>
+          <div class="group">
+            <label class="row">
+              <div class="row-text">
+                <span>Sounds</span>
+                <small>A chime for valid words, a buzz for invalid ones</small>
+              </div>
+              <input type="checkbox" class="switch" id="opt-sound">
+            </label>
+            <label class="row">
+              <div class="row-text">
+                <span>Full-screen verdict</span>
+                <small>After a scan, show the result big enough to read across the table</small>
+              </div>
+              <input type="checkbox" class="switch" id="opt-big">
+            </label>
+            <label class="row">
+              <div class="row-text">
+                <span>Definitions</span>
+                <small>Look up what valid words mean when you're online</small>
+              </div>
+              <input type="checkbox" class="switch" id="opt-defs">
+            </label>
+          </div>
+
           <h3 class="group-label">Dictionary</h3>
           <div class="group">
             <div class="row">
@@ -142,6 +173,7 @@
             <p>Fill the frame with the tiles and keep the phone parallel to them.</p>
             <p>Use good, even light. Turn on the torch if the room is dim.</p>
             <p>If a letter comes out wrong, tap the tiles to fix it.</p>
+            <p>Turn on Live to read the tiles continuously, without pressing the shutter.</p>
           </div>
           <p class="footnote center" id="version"></p>
         </div>
@@ -156,6 +188,8 @@
       <details class="seen" id="seen">
         <summary>What the scanner saw</summary>
         <div class="seen-img" id="seen-img"></div>
+        <button class="text-btn" id="save-photo" hidden>Save the photo</button>
+        <p class="seen-note">If it misread your tiles, save the photo and send it over so the scanner can be tuned.</p>
       </details>
       <div class="sheet-actions">
         <button class="btn primary" id="sheet-again">Scan again</button>
@@ -180,6 +214,16 @@
         <span>Settings</span>
       </button>
     </nav>
+
+    <div class="big" id="big" role="dialog" aria-modal="true" hidden>
+      <div class="big-inner">
+        <div class="big-badge" id="big-badge"></div>
+        <h2 id="big-title"></h2>
+        <div id="big-tiles"></div>
+        <p id="big-text"></p>
+        <span class="big-hint">Tap anywhere to close</span>
+      </div>
+    </div>
 
     <div class="toast" id="toast" hidden></div>
   </div>

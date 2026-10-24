@@ -7,6 +7,11 @@ Point your camera at a row of tiles and it tells you whether the word is valid. 
 - **Scan:** line the tiles up in the frame and tap the shutter. You can also pick a photo from your gallery.
 - **Fix misreads:** tap the tiles to correct a letter. If a scan isn't a word but a lookalike letter would make one (E/F, C/G, O/Q…), it suggests that word. It never swaps one in for you.
 - **Same-letter words:** when a word isn't valid, it lists valid words that use exactly the same letters.
+- **Live mode:** turn on Live and it reads the tiles continuously, with no need to press the shutter. A reading is only shown once it's been the same twice in a row, so it doesn't flicker.
+- **Full-screen verdict:** a big green ✓ or red ✗ you can turn round and show the table. Tap the expand icon on any result, or turn it on in Settings to show it after every scan.
+- **Sounds and vibration:** a chime for valid words and a buzz for invalid ones. Sounds can be turned off in Settings.
+- **Definitions when online:** valid words show their meaning, looked up from the Free Dictionary API with Wiktionary as a fallback. Recent look-ups are kept on the device.
+- **Save the photo:** under "What the scanner saw" you can save the original scan, so misreads can be sent in and used to tune the scanner.
 - **History** of everything you've checked, plus a **minimum word length** setting (default 3).
 - **Installable PWA** that works fully offline after the first visit, including the scanner.
 
@@ -59,6 +64,8 @@ js/app.js               UI and state
 js/ocr.js               tile segmentation and Tesseract
 js/camera.js            camera stream and cropping to the guide frame
 js/dictionary.js        word list, scoring, anagrams, lookalike suggestions
+js/define.js            online definitions (Free Dictionary API, Wiktionary)
+js/feedback.js          sounds and vibration
 sw.js                   offline caching
 manifest.webmanifest    PWA manifest
 data/enable.txt         ENABLE word list
