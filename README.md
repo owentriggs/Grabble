@@ -36,7 +36,15 @@ python3 -m http.server 8000
 
 Browsers only allow camera access and service workers on `https://` or `localhost`. To use it on your phone, deploy it:
 
-**GitHub Pages:** the included workflow (`.github/workflows/pages.yml`) deploys on every push to `main`. Turn it on once under **Settings → Pages → Source: GitHub Actions**. Then open the site on your phone and choose **Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome).
+**Live site:** https://owentriggs.github.io/Grabble/
+
+It's served by GitHub Pages from the `gh-pages` branch. To publish changes, push them to that branch:
+
+```sh
+git push origin HEAD:gh-pages
+```
+
+To install it, open the site on your phone and choose **Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome).
 
 ## Updating
 
