@@ -52,6 +52,10 @@
             <label class="text-btn">Pick a photo instead<input type="file" accept="image/*" id="photo-input-2" hidden></label>
           </div>
         </div>
+        <div class="mode-bar" role="group" aria-label="What to scan">
+          <button class="mode-btn" data-mode="word" aria-pressed="true">Check a word</button>
+          <button class="mode-btn" data-mode="count" aria-pressed="false">Count tiles</button>
+        </div>
         <div class="panel" id="scan-panel"></div>
       </section>
 
@@ -156,6 +160,7 @@
             <p>Fill the frame with the tiles and keep the phone parallel to them.</p>
             <p>Use good, even light. Turn on the torch if the room is dim.</p>
             <p>Tap Hold to freeze a reading, and tap the tiles to fix a letter.</p>
+            <p>At the end of a game, switch to Count tiles and scan each player’s tiles a few rows at a time. Add each batch to the tally, then save it as that player’s score.</p>
           </div>
           <p class="footnote center" id="version"></p>
         </div>

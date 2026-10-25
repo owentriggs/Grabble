@@ -2,7 +2,7 @@
 // install; the OCR engine core (one of three builds, picked by the device's
 // WebAssembly support) is cached the first time it's fetched.
 
-const VERSION = 'v1.2.0';
+const VERSION = 'v1.3.0';
 const CACHE = `grabble-${VERSION}`;
 
 const PRECACHE = [

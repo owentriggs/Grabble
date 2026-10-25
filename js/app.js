@@ -10,7 +10,7 @@ import {
   torchSupported, setTorch, captureGuide, fileToCanvas,
 } from './camera.js';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const $ = (id) => document.getElementById(id);
 
 const store = {
@@ -32,11 +32,14 @@ const state = {
   sound: store.get('grabble-sound', true),
   bigVerdict: store.get('grabble-big', false),
   defs: store.get('grabble-defs-on', true),
+  mode: store.get('grabble-mode', 'word'), // 'word' checks a word, 'count' totals tiles
+  tally: store.get('grabble-tally', []),     // [{ letters, blanks }] batches counted so far
+  players: store.get('grabble-players', []), // [{ name, tiles, points }] saved totals
   held: false,       // reading frozen (Hold, editing, or a picked photo)
   fromPhoto: false,
   editing: false,
   reading: false,    // reading a picked photo
-  scan: null,        // { letters, preview, photo } shown in the scan panel
+  scan: null,        // { letters, rows, preview, photo, blanks, added, entry } shown in the scan panel
 };
 
 // Live reading: a result is shown once two reads in a row agree.
@@ -137,6 +140,145 @@ function renderResult(panel, letters, { scanned = false, preview = null } = {}) 
 
 function renderEmpty(panel, text) {
   panel.innerHTML = `<div class="panel-empty"><p>${text}</p></div>`;
+}
+
+// ---------- Count panel (end of game) ----------
+
+const tilePoints = (letters) => letters.reduce((s, ch) => s + (LETTER_POINTS[ch] || 0), 0);
+
+function batchTotals(b) {
+  return { tiles: b.letters.length + b.blanks, points: tilePoints(b.letters) };
+}
+
+function sumTotals(batches) {
+  return batches.reduce((t, b) => {
+    const { tiles, points } = batchTotals(b);
+    return { tiles: t.tiles + tiles, points: t.points + points };
+  }, { tiles: 0, points: 0 });
+}
+
+function countTilesHTML(rows) {
+  return `<div class="tiles wrap">${rows.map((row) => row.map((ch) => (ch === '?'
+    ? '<div class="tile unknown">?</div>'
+    : `<div class="tile">${ch}<sub>${LETTER_POINTS[ch] ?? ''}</sub></div>`)).join('')).join('<i class="row-break"></i>')}</div>`;
+}
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function tallyHTML() {
+  if (!state.tally.length) return '';
+  const total = sumTotals(state.tally);
+  return `<div class="sec"><div class="sec-head"><h4 class="sec-label">Tally</h4>
+      <button class="text-btn" data-tally-clear>Clear</button></div>
+    <ul class="tally">${state.tally.map((b, i) => {
+    const t = batchTotals(b);
+    return `<li><span class="t-letters">${b.letters.join('') || '—'}${b.blanks ? ` <small>+${plural(b.blanks, 'blank')}</small>` : ''}</span>
+        <span class="t-num">${t.tiles}</span><span class="t-num">${t.points}</span>
+        <button class="t-del" data-tally-del="${i}" aria-label="Remove">${ICONS.cross}</button></li>`;
+  }).join('')}
+      <li class="t-total"><span class="t-letters">Total</span><span class="t-num">${total.tiles}</span><span class="t-num">${total.points}</span><span class="t-del"></span></li>
+    </ul>
+    <div class="t-legend"><span>tiles</span><span>points</span><span></span></div>
+    <button class="btn primary wide" data-tally-save>Save as a player’s score</button></div>`;
+}
+
+function playersHTML() {
+  if (!state.players.length) return '';
+  const ranked = state.players.map((p, i) => ({ ...p, i })).sort((a, b) => b.tiles - a.tiles || b.points - a.points);
+  return `<div class="sec"><div class="sec-head"><h4 class="sec-label">Scores</h4>
+      <button class="text-btn" data-players-clear>New game</button></div>
+    <ul class="tally players">${ranked.map((p, rank) => `<li>
+        <span class="t-letters"><b>${rank + 1}.</b> ${esc(p.name)}</span>
+        <span class="t-num">${p.tiles}</span><span class="t-num">${p.points}</span>
+        <button class="t-del" data-player-del="${p.i}" aria-label="Remove">${ICONS.cross}</button></li>`).join('')}
+    </ul>
+    <div class="t-legend"><span>tiles</span><span>points</span><span></span></div></div>`;
+}
+
+function renderCount(panel) {
+  const scan = state.scan;
+  let html = '';
+  if (scan) {
+    const { tiles, points } = batchTotals(scan);
+    const unknown = scan.letters.filter((ch) => ch === '?').length;
+    html += `<div class="sec word-sec">
+        <div class="count-totals pop">
+          <div><b>${tiles}</b><span>${tiles === 1 ? 'tile' : 'tiles'}</span></div>
+          <div><b>${points}</b><span>${points === 1 ? 'point' : 'points'}</span></div>
+        </div>
+        <button class="word-tiles" data-edit aria-label="Edit letters">${countTilesHTML(scan.rows)}</button>
+        <div class="edit-hint">${unknown
+    ? `${plural(unknown, 'tile')} couldn’t be read and score 0. Tap the tiles to fix them.`
+    : 'Tap the tiles to fix a letter'}</div>
+      </div>
+      <div class="sec count-actions">
+        <div class="row-text"><span>Blank tiles</span><small>The scanner can’t see blanks</small></div>
+        <div class="stepper">
+          <button data-blanks="-1" aria-label="Fewer blanks">−</button>
+          <output>${scan.blanks}</output>
+          <button data-blanks="1" aria-label="More blanks">+</button>
+        </div>
+      </div>
+      <div class="sec"><button class="btn primary wide" data-tally-add ${scan.added ? 'disabled' : ''}>${scan.added
+    ? `${ICONS.check} Added to tally`
+    : state.tally.length ? 'Add to tally' : 'Start a tally with these'}</button></div>`;
+  } else {
+    html += `<div class="sec panel-note"><p>${state.reading
+      ? 'Reading the photo…'
+      : isRunning() || state.cameraWanted
+        ? 'Point the camera at your tiles, a few rows at a time. Add each batch to the tally to total them up.'
+        : 'Turn on the camera, or pick a photo of your tiles.'}</p></div>`;
+  }
+  html += tallyHTML() + playersHTML();
+  if (scan && scan.preview) {
+    html += `<div class="sec"><details class="seen">
+        <summary>What the scanner saw</summary>
+        <div class="seen-img"></div>
+        <button class="text-btn" data-save>Save the photo</button>
+      </details></div>`;
+  }
+  panel.innerHTML = html;
+  if (scan && scan.preview) panel.querySelector('.seen-img').appendChild(scan.preview);
+}
+
+function saveTally() {
+  store.set('grabble-tally', state.tally);
+  store.set('grabble-players', state.players);
+}
+
+function addToTally() {
+  const scan = state.scan;
+  if (!scan || scan.added) return;
+  scan.entry = { letters: scan.letters.filter((ch) => ch !== '?'), blanks: scan.blanks };
+  state.tally.push(scan.entry);
+  scan.added = true;
+  saveTally();
+  tap();
+  // Carry on scanning the next batch.
+  if (state.held && !state.fromPhoto) setHold(false);
+  renderScan();
+}
+
+// Fixing a reading that's already in the tally fixes that tally entry too.
+function syncEntry() {
+  const scan = state.scan;
+  if (!scan || !scan.entry || !state.tally.includes(scan.entry)) return;
+  scan.entry.letters = scan.letters.filter((ch) => ch !== '?');
+  scan.entry.blanks = scan.blanks;
+  saveTally();
+}
+
+function savePlayer() {
+  if (!state.tally.length) return;
+  const name = prompt('Whose tiles are these?', `Player ${state.players.length + 1}`);
+  if (name == null) return;
+  const total = sumTotals(state.tally);
+  state.players.push({ name: name.trim() || `Player ${state.players.length + 1}`, ...total });
+  state.tally = [];
+  if (state.scan) { state.scan.added = true; state.scan.entry = null; }
+  saveTally();
+  toast(`Saved ${plural(total.tiles, 'tile')} for ${state.players[state.players.length - 1].name}`);
+  renderScan();
 }
 
 // ---------- Definitions ----------
@@ -248,6 +390,7 @@ function updateStatus() {
 
 function renderScan() {
   const panel = $('scan-panel');
+  if (state.mode === 'count') { renderCount(panel); return null; }
   if (state.reading) { renderEmpty(panel, 'Reading the photo…'); return null; }
   if (!state.scan) {
     renderEmpty(panel, isRunning() || state.cameraWanted
@@ -260,11 +403,27 @@ function renderScan() {
   return v;
 }
 
-function showScanResult(letters, preview, photo) {
-  state.scan = { letters, preview, photo };
+function showScanResult(letters, preview, photo, rows = [letters]) {
+  state.scan = { letters, rows, preview, photo, blanks: 0, added: false, entry: null };
   const v = renderScan();
-  if (v) verdictFeedback(v.kind);
+  if (state.mode === 'count') tap();
+  else if (v) verdictFeedback(v.kind);
   return v;
+}
+
+function setMode(mode) {
+  if (mode === state.mode) return;
+  state.mode = mode;
+  store.set('grabble-mode', mode);
+  document.querySelectorAll('.mode-btn').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+  $('viewfinder').classList.toggle('count', mode === 'count');
+  state.scan = null;
+  if (state.held) setHold(false);
+  live.last = '';
+  live.streak = 0;
+  live.shown = null;
+  if (!isRunning() && !state.cameraWanted) $('camera-off').hidden = false;
+  renderScan();
 }
 
 async function openCamera() {
@@ -311,14 +470,14 @@ function setHold(on, { fromPhoto = false } = {}) {
     still.hidden = true;
     live.last = '';
     live.streak = 0;
-    live.shown = state.scan ? state.scan.letters.join('') : null;
+    live.shown = state.scan ? state.scan.rows.map((r) => r.join('')).join(' ') : null;
   }
   updateStatus();
 }
 
 function holdCurrent() {
   setHold(true);
-  if (!state.scan) return;
+  if (!state.scan || state.mode === 'count') return;
   const v = evaluate(state.scan.letters);
   addHistory(v);
   if (v && state.bigVerdict) showBig(state.scan.letters);
@@ -337,15 +496,21 @@ async function readPhoto(file) {
     still.getContext('2d').drawImage(canvas, 0, 0);
     still.hidden = false;
     await state.dictReady;
-    const { letters, preview } = await readTiles(canvas);
+    const count = state.mode === 'count';
+    const { letters, rows, preview } = await readTiles(canvas, { multiRow: count });
     state.reading = false;
     if (!letters.length) {
       state.scan = null;
-      renderEmpty($('scan-panel'), 'No tiles found in that photo. Try a closer shot of a single row.');
+      if (count) {
+        renderScan();
+        toast('No tiles found in that photo. Try a closer shot.');
+      } else {
+        renderEmpty($('scan-panel'), 'No tiles found in that photo. Try a closer shot of a single row.');
+      }
       verdictFeedback('warn');
       return;
     }
-    const v = showScanResult(letters, preview, canvas);
+    const v = showScanResult(letters, preview, canvas, rows);
     addHistory(v);
     if (v && state.bigVerdict) showBig(letters);
   } catch (err) {
@@ -362,24 +527,25 @@ async function liveTick() {
     const crop = captureGuide($('video'), $('guide'));
     if (crop) {
       try {
-        const result = await readTiles(crop);
-        if (!state.held && !state.editing) onLiveRead(result, crop);
+        const mode = state.mode;
+        const result = await readTiles(crop, { multiRow: mode === 'count' });
+        if (!state.held && !state.editing && state.mode === mode) onLiveRead(result, crop);
       } catch { /* try again next tick */ }
     }
   }
   setTimeout(liveTick, ready ? 150 : 500);
 }
 
-function onLiveRead({ letters, preview }, crop) {
-  const word = letters.join('');
+function onLiveRead({ letters, rows, preview }, crop) {
+  const word = rows.map((r) => r.join('')).join(' ');
   live.streak = word === live.last ? live.streak + 1 : 1;
   live.last = word;
   if (!word) return; // keep the last result up while the camera moves around
   // Log a reading to history once it has held steady for a moment.
-  if (live.streak === 4 && word === live.shown) addHistory(evaluate(letters));
+  if (live.streak === 4 && word === live.shown && state.mode === 'word') addHistory(evaluate(letters));
   if (live.streak < 2 || word === live.shown) return;
   live.shown = word;
-  showScanResult(letters, preview, crop);
+  showScanResult(letters, preview, crop, rows);
 }
 
 function startInlineEdit() {
@@ -387,27 +553,36 @@ function startInlineEdit() {
   if (!wrap || !state.scan) return;
   if (!state.held) setHold(true);
   state.editing = true;
+  const count = state.mode === 'count';
   const input = document.createElement('input');
   input.className = 'inline-edit';
-  input.value = state.scan.letters.join('').replace(/\?/g, '');
-  input.maxLength = 15;
+  // When counting, rows of tiles are separated by spaces.
+  input.value = state.scan.rows.map((r) => r.join('')).join(' ').replace(/\?/g, '').trim();
+  if (!count) input.maxLength = 15;
   input.setAttribute('autocapitalize', 'characters');
   input.setAttribute('autocomplete', 'off');
   input.setAttribute('autocorrect', 'off');
   input.spellcheck = false;
   input.enterKeyHint = 'done';
   wrap.replaceWith(input);
-  $('scan-panel').querySelector('.edit-hint').textContent = 'Type the letters, then tap Done';
+  $('scan-panel').querySelector('.edit-hint').textContent = count
+    ? 'Type the letters (spaces between rows are fine), then tap Done'
+    : 'Type the letters, then tap Done';
   input.focus();
   input.addEventListener('input', () => {
-    input.value = input.value.toUpperCase().replace(/[^A-Z]/g, '');
+    input.value = input.value.toUpperCase().replace(count ? /[^A-Z ]/g : /[^A-Z]/g, '');
   });
   input.addEventListener('blur', () => {
     state.editing = false;
-    const next = input.value.split('').filter(Boolean);
-    if (!next.length) { renderScan(); return; }
-    const v = showScanResult(next, state.scan.preview, state.scan.photo);
-    addHistory(v);
+    const rows = input.value.split(/\s+/).filter(Boolean).map((r) => r.split(''));
+    if (!rows.length) { renderScan(); return; }
+    const { blanks, added, entry } = state.scan;
+    const v = showScanResult(rows.flat(), state.scan.preview, state.scan.photo, rows);
+    if (count) {
+      Object.assign(state.scan, { blanks, added, entry });
+      syncEntry();
+      renderScan();
+    } else addHistory(v);
   }, { once: true });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
 }
@@ -473,6 +648,11 @@ function init() {
   document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showScreen(t.dataset.screen)));
 
   $('camera-start').addEventListener('click', openCamera);
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.setAttribute('aria-pressed', String(b.dataset.mode === state.mode));
+    b.addEventListener('click', () => setMode(b.dataset.mode));
+  });
+  $('viewfinder').classList.toggle('count', state.mode === 'count');
   $('hold-btn').addEventListener('click', () => {
     tap();
     if (state.held) {
@@ -505,6 +685,35 @@ function init() {
   $('scan-panel').addEventListener('click', (e) => {
     if (e.target.closest('[data-edit]')) { startInlineEdit(); return; }
     if (e.target.closest('[data-save]')) { savePhoto(); return; }
+    if (e.target.closest('[data-tally-add]')) { addToTally(); return; }
+    if (e.target.closest('[data-tally-save]')) { savePlayer(); return; }
+    const blanks = e.target.closest('[data-blanks]');
+    if (blanks && state.scan) {
+      if (!state.held) setHold(true); // keep the reading still while adjusting it
+      state.scan.blanks = Math.max(0, state.scan.blanks + Number(blanks.dataset.blanks));
+      syncEntry();
+      renderScan();
+      return;
+    }
+    const del = e.target.closest('[data-tally-del]');
+    if (del) { state.tally.splice(Number(del.dataset.tallyDel), 1); saveTally(); renderScan(); return; }
+    const pdel = e.target.closest('[data-player-del]');
+    if (pdel) { state.players.splice(Number(pdel.dataset.playerDel), 1); saveTally(); renderScan(); return; }
+    if (e.target.closest('[data-tally-clear]')) {
+      if (!confirm('Clear the tally?')) return;
+      state.tally = [];
+      saveTally();
+      renderScan();
+      return;
+    }
+    if (e.target.closest('[data-players-clear]')) {
+      if (!confirm('Clear all scores and start a new game?')) return;
+      state.players = [];
+      state.tally = [];
+      saveTally();
+      renderScan();
+      return;
+    }
     const suggestion = e.target.closest('button[data-word]');
     if (suggestion) {
       if (!state.held) setHold(true);

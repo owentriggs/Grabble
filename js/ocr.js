@@ -174,17 +174,42 @@ const median = (arr) => {
   return s.length ? s[s.length >> 1] : 0;
 };
 
-function pickLetters(comps, w, h) {
+// Merge pieces that overlap horizontally (a letter split by glare).
+function mergeRow(row) {
+  row.sort((a, b) => a.x - b.x);
+  const merged = [];
+  for (const c of row) {
+    const last = merged[merged.length - 1];
+    if (last) {
+      const overlap = Math.min(last.x + last.w, c.x + c.w) - Math.max(last.x, c.x);
+      if (overlap > Math.min(last.w, c.w) * 0.6) {
+        const x = Math.min(last.x, c.x), y = Math.min(last.y, c.y);
+        last.w = Math.max(last.x + last.w, c.x + c.w) - x;
+        last.h = Math.max(last.y + last.h, c.y + c.h) - y;
+        last.x = x; last.y = y;
+        last.area += c.area;
+        last.ids.push(...c.ids);
+        continue;
+      }
+    }
+    merged.push({ ...c, ids: [...c.ids] });
+  }
+  return merged;
+}
+
+// Returns { rows: [[glyph, ...], ...], slope }. With multiRow, tiles laid out
+// in several rows are all kept, top to bottom; otherwise just the one line.
+function pickLetters(comps, w, h, multiRow) {
   const minArea = Math.max(40, w * h * 0.00003);
   let cand = comps.filter((c) =>
     c.area >= minArea
     && c.x > 1 && c.y > 1 && c.x + c.w < w - 1 && c.y + c.h < h - 1 // touches crop edge
-    && c.h >= Math.max(12, h * 0.02) && c.h <= h * 0.92
+    && c.h >= Math.max(12, h * (multiRow ? 0.012 : 0.02)) && c.h <= h * 0.92
     && c.w <= c.h * 2.2
     && c.area / (c.w * c.h) >= 0.12 // hollow outlines (tile edges)
     && c.contrast >= 0.3 // printed letters stand out far more than wood grain or carpet
     && c.stroke >= Math.max(2.5, c.h * 0.09)); // and have thick strokes, unlike speckle and texture
-  if (!cand.length) return { glyphs: [], slope: 0 };
+  if (!cand.length) return { rows: [], slope: 0 };
 
   // Letters are the most contrasty things in the shot, so anything much weaker
   // than the strongest blobs is texture. Relative, so dim photos still work.
@@ -204,39 +229,37 @@ function pickLetters(comps, w, h) {
   let keep = cand.filter((c) => c.h >= ref * 0.62 && c.h <= ref * 1.45);
 
   // Keep things on one (possibly tilted) line. Theil–Sen fit: the median of
-  // pairwise slopes shrugs off the odd stray blob.
+  // pairwise slopes shrugs off the odd stray blob. With several rows, only
+  // pairs that look like neighbours on the same row count.
   const cx = (c) => c.x + c.w / 2, cy = (c) => c.y + c.h / 2;
   const slopes = [];
   for (let i = 0; i < keep.length; i++) {
     for (let j = i + 1; j < keep.length; j++) {
       const dx = cx(keep[j]) - cx(keep[i]);
-      if (Math.abs(dx) > ref * 0.5) slopes.push((cy(keep[j]) - cy(keep[i])) / dx);
+      const dy = cy(keep[j]) - cy(keep[i]);
+      if (multiRow && Math.abs(dy) > Math.abs(dx) * 0.5) continue;
+      if (Math.abs(dx) > ref * 0.5) slopes.push(dy / dx);
     }
   }
   const slope = Math.max(-0.5, Math.min(0.5, median(slopes)));
-  const icpt = median(keep.map((c) => cy(c) - slope * cx(c)));
-  keep = keep.filter((c) => Math.abs(cy(c) - (icpt + slope * cx(c))) <= ref * 0.7);
+  const offset = (c) => cy(c) - slope * cx(c);
 
-  // Merge pieces that overlap horizontally (a letter split by glare).
-  keep.sort((a, b) => a.x - b.x);
-  const merged = [];
-  for (const c of keep) {
-    const last = merged[merged.length - 1];
-    if (last) {
-      const overlap = Math.min(last.x + last.w, c.x + c.w) - Math.max(last.x, c.x);
-      if (overlap > Math.min(last.w, c.w) * 0.6) {
-        const x = Math.min(last.x, c.x), y = Math.min(last.y, c.y);
-        last.w = Math.max(last.x + last.w, c.x + c.w) - x;
-        last.h = Math.max(last.y + last.h, c.y + c.h) - y;
-        last.x = x; last.y = y;
-        last.area += c.area;
-        last.ids.push(...c.ids);
-        continue;
-      }
-    }
-    merged.push({ ...c, ids: [...c.ids] });
+  if (!multiRow) {
+    const icpt = median(keep.map(offset));
+    keep = keep.filter((c) => Math.abs(offset(c) - icpt) <= ref * 0.7);
+    return { rows: [mergeRow(keep)], slope };
   }
-  return { glyphs: merged, slope };
+
+  // Split into rows wherever there's a clear gap between letter centres.
+  keep.sort((a, b) => offset(a) - offset(b));
+  const rows = [];
+  let prev = -Infinity;
+  for (const c of keep) {
+    if (offset(c) - prev > ref * 0.55) rows.push([]);
+    rows[rows.length - 1].push(c);
+    prev = offset(c);
+  }
+  return { rows: rows.map(mergeRow), slope };
 }
 
 function glyphCanvas(labels, w, glyph, scale) {
@@ -278,7 +301,9 @@ function padded(canvas, pad) {
   return c;
 }
 
-function findLetters(canvas) {
+const countOf = (found) => (found ? found.rows.reduce((n, r) => n + r.length, 0) : 0);
+
+function findLetters(canvas, multiRow) {
   const { width: w, height: h } = canvas;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const gray = toGray(ctx.getImageData(0, 0, w, h));
@@ -286,8 +311,8 @@ function findLetters(canvas) {
   for (const darkInk of [true, false]) {
     const contrast = (i) => contrastAt(gray, means, i, darkInk);
     const { labels, comps } = components(threshold(gray, means, darkInk), w, h, contrast);
-    const { glyphs, slope } = pickLetters(comps, w, h);
-    if (glyphs.length) return { labels, glyphs, slope, w };
+    const { rows, slope } = pickLetters(comps, w, h, multiRow);
+    if (rows.length) return { labels, rows, slope, w };
   }
   return null;
 }
@@ -309,31 +334,8 @@ function rotated(canvas, angle) {
   return c;
 }
 
-// Find letter glyphs in a canvas. Exposed for testing.
-export function segment(source) {
-  let w = source.width, h = source.height;
-  const k = Math.min(1, MAX_SIDE / Math.max(w, h));
-  w = Math.round(w * k); h = Math.round(h * k);
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  c.getContext('2d', { willReadFrequently: true }).drawImage(source, 0, 0, w, h);
-
-  let found = findLetters(c);
-  // If the row is tilted, straighten the photo and look again.
-  if (found && found.glyphs.length >= 2 && Math.abs(found.slope) > 0.03) {
-    const again = findLetters(rotated(c, -Math.atan(found.slope)));
-    if (again && again.glyphs.length >= found.glyphs.length) found = again;
-  }
-  if (!found) return { glyphs: [], bars: [], line: null };
-
-  const { labels, glyphs } = found;
-  const ref = median(glyphs.map((g) => g.h));
-  const scale = GLYPH_H / ref;
-  const canvases = glyphs.map((g) => glyphCanvas(labels, found.w, g, scale));
-  // A solid narrow bar can only be an I. Tesseract often drops a lone bar, so
-  // we decide those ourselves.
-  const bars = glyphs.map((g) => g.w / g.h < 0.3 && g.area / (g.w * g.h) > 0.75);
-
+// Draw glyph canvases side by side as one clean line of text.
+function lineCanvas(canvases) {
   const gap = Math.round(GLYPH_H * 0.45);
   const pad = Math.round(GLYPH_H * 0.5);
   const line = document.createElement('canvas');
@@ -348,31 +350,69 @@ export function segment(source) {
     lctx.drawImage(g, x, line.height - pad - g.height);
     x += g.width + gap;
   }
-  return { glyphs: canvases, bars, line };
+  return line;
+}
+
+// Find letter glyphs in a canvas. Returns one { glyphs, bars, line } per row
+// of tiles (at most one unless multiRow). Exposed for testing.
+export function segment(source, { multiRow = false } = {}) {
+  let w = source.width, h = source.height;
+  const k = Math.min(1, MAX_SIDE / Math.max(w, h));
+  w = Math.round(w * k); h = Math.round(h * k);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d', { willReadFrequently: true }).drawImage(source, 0, 0, w, h);
+
+  let found = findLetters(c, multiRow);
+  // If the rows are tilted, straighten the photo and look again.
+  if (countOf(found) >= 2 && Math.abs(found.slope) > 0.03) {
+    const again = findLetters(rotated(c, -Math.atan(found.slope)), multiRow);
+    if (countOf(again) >= countOf(found)) found = again;
+  }
+  if (!found) return [];
+
+  const { labels } = found;
+  const ref = median(found.rows.flat().map((g) => g.h));
+  const scale = GLYPH_H / ref;
+  return found.rows.map((row) => {
+    const glyphs = row.map((g) => glyphCanvas(labels, found.w, g, scale));
+    // A solid narrow bar can only be an I. Tesseract often drops a lone bar, so
+    // we decide those ourselves.
+    const bars = row.map((g) => g.w / g.h < 0.3 && g.area / (g.w * g.h) > 0.75);
+    return { glyphs, bars, line: lineCanvas(glyphs) };
+  });
+}
+
+// Stack each row's clean line into one picture of what the scanner saw.
+function stacked(lines) {
+  if (lines.length === 1) return lines[0];
+  const out = document.createElement('canvas');
+  out.width = Math.max(...lines.map((l) => l.width));
+  out.height = lines.reduce((s, l) => s + l.height, 0);
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  let y = 0;
+  for (const l of lines) { ctx.drawImage(l, 0, y); y += l.height; }
+  return out;
 }
 
 // Reads run one at a time (live scanning and the shutter share one engine,
 // and a read changes its settings part-way through).
 let queue = Promise.resolve();
 
-// Returns { letters: ['C','A','T'] (with '?' for unreadable), preview: canvas }
-export function readTiles(source) {
-  const run = queue.then(() => readNow(source));
+// Returns { letters: ['C','A','T'] (with '?' for unreadable), rows: [['C','A','T']],
+// preview: canvas }. With multiRow, every row of tiles in the shot is read.
+export function readTiles(source, opts) {
+  const run = queue.then(() => readNow(source, opts));
   queue = run.catch(() => {});
   return run;
 }
 
-async function readNow(source) {
-  const { glyphs, bars, line } = segment(source);
-  if (!glyphs.length) return { letters: [], preview: null };
-
-  const worker = await getWorker();
-  await worker.setParameters({ tessedit_pageseg_mode: '7' });
+async function readRow(worker, { glyphs, bars, line }) {
   const { data } = await worker.recognize(line);
   const text = (data.text || '').toUpperCase().replace(/[^A-Z]/g, '');
-  if (text.length === glyphs.length) {
-    return { letters: text.split('').map((ch, i) => (bars[i] ? 'I' : ch)), preview: line };
-  }
+  if (text.length === glyphs.length) return text.split('').map((ch, i) => (bars[i] ? 'I' : ch));
 
   // The line read didn't line up with the glyphs we found, so read them one by one.
   await worker.setParameters({ tessedit_pageseg_mode: '10' });
@@ -384,5 +424,16 @@ async function readNow(source) {
     letters.push(ch[0] || '?');
   }
   await worker.setParameters({ tessedit_pageseg_mode: '7' });
-  return { letters, preview: line };
+  return letters;
+}
+
+async function readNow(source, opts) {
+  const found = segment(source, opts);
+  if (!found.length) return { letters: [], rows: [], preview: null };
+
+  const worker = await getWorker();
+  await worker.setParameters({ tessedit_pageseg_mode: '7' });
+  const rows = [];
+  for (const row of found) rows.push(await readRow(worker, row));
+  return { letters: rows.flat(), rows, preview: stacked(found.map((r) => r.line)) };
 }

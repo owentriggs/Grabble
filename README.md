@@ -12,6 +12,7 @@ Point your camera at a row of tiles and it tells you whether the word is valid. 
 - **Sounds and vibration:** a chime for valid words and a buzz for invalid ones. Sounds can be turned off in Settings.
 - **Definitions when online:** valid words show their meaning, looked up from the Free Dictionary API with Wiktionary as a fallback. Recent look-ups are kept on the device.
 - **Save the photo:** under "What the scanner saw" you can save the original scan, so misreads can be sent in and used to tune the scanner.
+- **Count tiles at the end of a game:** switch the Scan screen to **Count tiles** and point the camera at a player's tiles. It reads several rows at once and shows the number of tiles and their total points. Add each batch to the **tally**, add any blanks (the scanner can't see them), then save the tally as that player's score. The **Scores** list ranks everyone by tiles, then points.
 - **History** of everything you've checked, plus a **minimum word length** setting (default 3).
 - **Installable PWA** that works fully offline after the first visit, including the scanner.
 
